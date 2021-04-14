@@ -74,7 +74,14 @@ Apify.main(async () => {
         console.log(`Opening URL: ${requestURL}`);
         const xxx = await webDriver.get(requestURL);
 
-        const context = { requestURL, userData, webDriver, By, Key, until };
+        const context = {
+            requestURL,
+            userData,
+            driver: webDriver,
+            By,
+            Key,
+            until,
+        };
 
         const pageFunctionResult = await evaledPageFunction(context);
 
