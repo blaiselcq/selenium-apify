@@ -3,6 +3,7 @@
 	"version": "0.0.1",
 	"description": "This is a boilerplate of an Apify actor.",
 	"dependencies": {
+		"@apify/scraper-tools": "^0.1.13",
 		"apify": "^0.15.2",
 		"selenium-webdriver": "^4.0.0-alpha.5"
 	},
