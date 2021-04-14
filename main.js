@@ -1,12 +1,10 @@
-const util = require('util');
-const path = require('path');
-const fs = require('fs');
-const Apify = require('apify')
-const _ = require('underscore');;
-const { Capabilities, Builder } = require('selenium-webdriver');
-const firefox = require('selenium-webdriver/firefox');
-const proxy = require('selenium-webdriver/proxy');
-const { anonymizeProxy } = require('proxy-chain');
+const Apify = require("apify");
+const { tools } = require("@apify/scraper-tools");
+const _ = require("underscore");
+const { Capabilities, Builder, By, Key, until } = require("selenium-webdriver");
+const firefox = require("selenium-webdriver/firefox");
+const proxy = require("selenium-webdriver/proxy");
+const { anonymizeProxy } = require("proxy-chain");
 
 const launchFirefoxWebdriver = async (proxyUrl) => {
     // logging.installConsoleHandler();
@@ -14,19 +12,19 @@ const launchFirefoxWebdriver = async (proxyUrl) => {
 
     // See https://github.com/SeleniumHQ/selenium/wiki/DesiredCapabilities for reference.
     const capabilities = new Capabilities();
-    capabilities.set('browserName', 'firefox');
+    capabilities.set("browserName", "firefox");
 
     const builder = new Builder();
 
     const firefoxOptions = new firefox.Options();
 
     let firefoxPath;
-    if (process.env.APIFY_XVFB === '1') {
+    if (process.env.APIFY_XVFB === "1") {
         // Running on server
-        firefoxPath = '/firefox/firefox-bin';
+        firefoxPath = "/firefox/firefox-bin";
     } else {
-        // Running locally on macOS
-        firefoxPath = path.join(__dirname, './node_modules/custom_firefox/Nightly.app/Contents/MacOS/firefox-bin');
+        // Running locally
+        firefoxPath = "/usr/bin/firefox";
     }
 
     console.log(`Using Firefox executable: ${firefoxPath}`);
@@ -37,50 +35,60 @@ const launchFirefoxWebdriver = async (proxyUrl) => {
         .withCapabilities(capabilities);
 
     if (proxyUrl) {
-        console.log('Using provided proxyUrl');
+        console.log("Using provided proxyUrl");
         const anonProxyUrl = await anonymizeProxy(proxyUrl);
         const parsed = new URL(anonProxyUrl);
-        setup.setProxy(proxy.manual({ http: parsed.host, https: parsed.host, ftp: parsed.host }));
+        setup.setProxy(
+            proxy.manual({
+                http: parsed.host,
+                https: parsed.host,
+                ftp: parsed.host,
+            })
+        );
     }
 
     const webDriver = setup.build();
     return webDriver;
 };
 
-
 Apify.main(async () => {
     const input = await Apify.getInput();
+    const startURLs = input.startUrls;
 
-    const webDriver = await launchFirefoxWebdriver(input.proxyUrl);
+    // Dataset
+    let dataset = await Apify.openDataset(input.datasetName);
+    const { itemsCount } = await dataset.getInfo();
+    let = itemsCount || 0;
 
-    console.log(`Opening URL: ${input.url}`);
-    const xxx = await webDriver.get(input.url);
+    // KeyValueStore
+    keyValueStore = await Apify.openKeyValueStore(input.keyValueStoreName);
 
-    const url = await webDriver.getCurrentUrl();
-    console.log(`Loaded URL ${url}`);
+    evaledPageFunction = tools.evalFunctionOrThrow(input.pageFunction);
 
-    if (input.delaySecs > 0) {
-        console.log(`Sleeping for ${input.delaySecs} secs`);
-        await Apify.utils.sleep(input.delaySecs * 1000);
+    for (i = 0; i < startURLs.length; i++) {
+        const requestURL = startURLs[i].url;
+        const userData = startURLs[i].userData;
+
+        const webDriver = await launchFirefoxWebdriver(input.proxyUrl);
+
+        console.log(`Opening URL: ${requestURL}`);
+        const xxx = await webDriver.get(requestURL);
+
+        const context = { requestURL, userData, webDriver, By, Key, until };
+
+        const pageFunctionResult = await evaledPageFunction(context);
+
+        const payload = tools.createDatasetPayload(
+            {},
+            {},
+            pageFunctionResult,
+            false
+        );
+
+        await dataset.pushData(payload);
+
+        await webDriver.quit();
     }
 
-    console.log('Saving HTML');
-    const html = await webDriver.executeAsyncScript(function() {
-        const callback = arguments[arguments.length - 1];
-        callback(document.documentElement.innerHTML);
-    });
-    console.log(`HTML length: ${html.length} chars`);
-
-    console.log('Taking screenshot');
-    const screenshotBase64 = await webDriver.takeScreenshot();
-    const buffer = Buffer.from(screenshotBase64, 'base64');
-    console.log(`Screenshot size: ${buffer.length} bytes`);
-
-    console.log('Saving data to key-value store');
-    await Apify.setValue('content.html', html, { contentType: 'text/html' });
-    await Apify.setValue('screenshot.png', buffer, { contentType: 'image/png' });
-
-    await webDriver.quit();
-
-    console.log('Done.');
+    console.log("Done.");
 });
